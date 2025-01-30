@@ -26,6 +26,7 @@ def clear_chat_history():
     st.session_state.messages = []
     st.rerun()
 
+st.set_page_config(page_title="Azure AI Foundry powered Agent Service Chatbot", page_icon=":cloud:", layout="wide")
 st.title("Azure AI Agent Service Chat")
 
 
@@ -66,11 +67,11 @@ if user_query := st.chat_input("Ask the agent something:"):
             thread = project_client.agents.create_thread()
             st.session_state.thread_id = thread.id
             st.session_state.progress += 25
-            progress_indicator.progress(st.session_state.progress)
+            progress_indicator.progress(st.session_state.progress, "creating new thread...")
         else:
             thread = project_client.agents.get_thread(st.session_state.thread_id)
             st.session_state.progress += 25
-            progress_indicator.progress(st.session_state.progress)
+            progress_indicator.progress(st.session_state.progress, "thinking...")
 
         bing_connection = project_client.connections.get(connection_name=os.environ["BING_CONNECTION_NAME"])
         bing = BingGroundingTool(connection_id=bing_connection.id)
@@ -81,7 +82,7 @@ if user_query := st.chat_input("Ask the agent something:"):
         if "CodeInterpreter" in selected_tools:
             toolset.add(code_interpreter)
         st.session_state.progress += 25
-        progress_indicator.progress(st.session_state.progress)
+        progress_indicator.progress(st.session_state.progress, "adding tools...")
 
         if st.session_state.agent_id is None:
             agent = project_client.agents.create_agent(
@@ -93,7 +94,7 @@ if user_query := st.chat_input("Ask the agent something:"):
             )
             st.session_state.agent_id = agent.id
             st.session_state.progress += 25
-            progress_indicator.progress(st.session_state.progress)
+            progress_indicator.progress(st.session_state.progress, "initializing new agent...")
         else:
             agent = project_client.agents.get_agent(st.session_state.agent_id)
 
@@ -118,6 +119,8 @@ if user_query := st.chat_input("Ask the agent something:"):
                 images_found = False
                 python_code = False
                 if "BingGrounding" in selected_tools and last_msg.text.annotations:
+                    st.session_state.progress += 25
+                    progress_indicator.progress(st.session_state.progress, "Grounding using Bing...")
                     citations = []
                     for annotation in last_msg.text.annotations:
                         citation_url = annotation.get("url_citation", {}).get("url")
@@ -142,7 +145,7 @@ if user_query := st.chat_input("Ask the agent something:"):
                                 file_name=file_name
                             )
                         st.session_state.progress += 25
-                        progress_indicator.progress(st.session_state.progress)
+                        progress_indicator.progress(st.session_state.progress,"Executing Code Interpreter...")
                     # Retrieve Python code snippet
                     # if code_interpreter attribute exists
                     run_details = project_client.agents.list_run_steps(

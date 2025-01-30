@@ -2,3 +2,4 @@ azure-ai-projects
 azure-identity
 streamlit
 python-dotenv
+azure-ai-inference

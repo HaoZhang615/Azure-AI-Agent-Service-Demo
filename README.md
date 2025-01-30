@@ -1,9 +1,8 @@
-
-# Azure AI Agent Service Demo
+# Azure AI Agents Demos
 
 ## Overview
 
-Azure AI Agent Service Demo is a Streamlit-based web application that enables users to interact with an AI agent powered by Azure AI services. The application supports tools like Bing Grounding and Code Interpreter to enhance the AI's capabilities.
+Azure AI Agents Demos is a bundle of Streamlit-based demo level web application that enables users to interact with an AI agent powered by Azure AI services. The application supports tools like Bing Grounding and Code Interpreter to enhance the AI's capabilities.
 
 ## Features
 
@@ -41,10 +40,9 @@ Azure AI Agent Service Demo is a Streamlit-based web application that enables us
     ```
 
 4. **Configure Environment Variables:**
-    - Create a `.env` file in the project root:
-        ```env
-        PROJECT_CONNECTION_STRING=your_connection_string
-        BING_CONNECTION_NAME=your_bing_connection_name
+    - Copy the `.env.example` file to `.env` and fill in your values:
+        ```bash
+        cp .env.example .env
         ```
 
 ## Usage
@@ -56,6 +54,15 @@ streamlit run streamlit_frontend.py
 ```
 
 Open the provided URL in your web browser to start interacting with the AI agent.
+
+## UPDATE: Running the DeepSeek R1 Chatbot (requires DeepSeek R1 model deployed as Model as a Service in Azure AI Foundry, to obtain the endpoint and key) 
+1. Make sure you have installed the required dependencies in your virtual environment.
+2. Run the command:
+   ```
+   streamlit run streamlit_DeepSeek_R1.py
+   ```
+3. In your browser, use the sidebar to configure the temperature, max tokens, and system prompt (recommendation: Avoid adding a system prompt; all instructions should be contained within the user prompt).
+4. Type your query in the chat input to interact with the model.
 
 ## Contributing
 
