@@ -1,3 +1,5 @@
 example.py
 .venv
 .env
+azure_ai_integration.py
+conversations/*
