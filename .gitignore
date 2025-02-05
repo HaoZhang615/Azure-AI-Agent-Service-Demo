@@ -3,3 +3,6 @@ example.py
 .env
 azure_ai_integration.py
 conversations/*
+sample_rag_chatbot/*
+__pycache__/*
+agent_conversations/*

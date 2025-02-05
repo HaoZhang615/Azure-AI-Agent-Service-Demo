@@ -61,7 +61,7 @@ def summarize_conversation(messages):
     response = AOAI_client.complete(
         messages=formatted_messages, 
         max_tokens=64, 
-        temperature=0.9)
+        temperature=0)
     return response.choices[0].message.content.strip()
 
 if "session_id" not in st.session_state:
@@ -80,7 +80,9 @@ with st.sidebar:
         clear_chat()
 
     st.write("Available Sessions:")
-    for conv_file in conversations_path.glob("*.json"):
+    # Display a list of conversation sessions sorted by last modified time
+    sorted_files = sorted(conversations_path.glob("*.json"), key=lambda f: f.stat().st_mtime, reverse=True)
+    for conv_file in sorted_files:
         sid = conv_file.stem
         conv_data = json.loads(conv_file.read_text())
         short_summary = summarize_conversation(conv_data)
@@ -88,7 +90,7 @@ with st.sidebar:
         if cols[0].button(short_summary or sid, key=f"switch_{sid}"):
             st.session_state.session_id = sid
             st.session_state.messages = load_messages(sid)
-        if cols[1].button("Close", key=f"close_{sid}"):
+        if cols[1].button("delete", key=f"close_{sid}"):
             conv_file.unlink(missing_ok=True)
     if st.button("New Thread"):
         new_id = str(uuid.uuid4())
@@ -132,3 +134,4 @@ if user_input := st.chat_input("Ask me anything..."):
         st.write_stream(stream_generator)  # Display response in Streamlit
         st.session_state.messages.append({"role": "assistant", "content": response_buffer})
         save_messages(st.session_state.session_id, st.session_state.messages)
+        st.rerun()

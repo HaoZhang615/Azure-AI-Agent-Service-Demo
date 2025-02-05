@@ -3,3 +3,5 @@ azure-identity
 streamlit
 python-dotenv
 azure-ai-inference
+azure-search-documents
+pandas
