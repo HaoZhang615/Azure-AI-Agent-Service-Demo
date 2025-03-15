@@ -121,7 +121,7 @@ with st.sidebar:
         clear_chat_history()
 
     st.write("Available Sessions:")
-    sorted_files = sorted(agent_conversations_path.glob("*.json"), key=lambda f: f.stat().st_mtime, reverse=True)
+    sorted_files = sorted(agent_conversations_path.glob("*.json"), key=lambda f: f.stat().st_mtime, reverse=True) # sort by last modified time
     for conv_file in sorted_files:
         sid = conv_file.stem
         session_data = json.loads(conv_file.read_text())

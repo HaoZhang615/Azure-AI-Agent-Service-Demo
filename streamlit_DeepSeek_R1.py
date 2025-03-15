@@ -30,7 +30,7 @@ AOAI_client = ChatCompletionsClient(
 st.set_page_config(page_title="Azure AI Foundry powered DeepSeek R1 Chatbot", page_icon=":whale2:", layout="wide")
 st.title("Azure AI Foundry powered DeepSeek R1 Chatbot")
 
-conversations_path = Path("conversations")
+conversations_path = Path("DeepSeek_conversations")
 conversations_path.mkdir(exist_ok=True)
 
 def load_messages(session_id):
