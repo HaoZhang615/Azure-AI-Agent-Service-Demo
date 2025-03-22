@@ -7,10 +7,12 @@ from dotenv import load_dotenv
 import streamlit as st
 from opentelemetry import trace
 from azure.identity.aio import DefaultAzureCredential
-from semantic_kernel.agents import AgentGroupChat
+from semantic_kernel import Kernel
+from semantic_kernel.agents import AgentGroupChat, ChatCompletionAgent
 from semantic_kernel.agents.azure_ai import AzureAIAgent, AzureAIAgentSettings
 from semantic_kernel.agents.strategies import TerminationStrategy
 from semantic_kernel.contents import AuthorRole, ChatMessageContent
+from semantic_kernel.connectors.ai.open_ai import AzureChatCompletion
 
 # Load environment variables
 load_dotenv()
@@ -88,6 +90,17 @@ def get_agent_avatar(agent_name):
             
     return default_avatar
 
+# Function to create a Kernel instance with Azure OpenAI service
+def create_kernel() -> Kernel:
+    """Creates a Kernel instance with an Azure OpenAI ChatCompletion service."""
+    kernel = Kernel()
+    kernel.add_service(AzureChatCompletion(
+        deployment_name=os.getenv("AZURE_OPENAI_GPT4o_MINI_DEPLOYMENT"),
+        api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+        endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
+    ))
+    return kernel
+
 # Set Streamlit page configuration
 st.set_page_config(page_title="Azure AI Agent Group Chat", page_icon="🤖", layout="wide")
 st.title("Azure AI Agent Group Chat")
@@ -97,12 +110,19 @@ if "session_id" not in st.session_state:
     st.session_state.session_id = str(uuid.uuid4())
 if "messages" not in st.session_state:
     st.session_state.messages = load_messages(st.session_state.session_id)
+if "show_inner_monologue" not in st.session_state:
+    st.session_state.show_inner_monologue = True
 
 # Sidebar configuration
 with st.sidebar:
     st.header("Agent Configuration")
     
-    reviewer_name = st.text_input("Reviewer Agent Name", "ArtDirector")
+    # Toggle for showing/hiding inner monologue
+    st.session_state.show_inner_monologue = st.checkbox("Show Agent Inner Monologue", 
+                                                     value=st.session_state.show_inner_monologue)
+    
+    reviewer_name = st.text_input("Reviewer Agent Name", "Reviewer")
+    # Set the default reviewer instructions
     reviewer_instructions = st.text_area("Reviewer Instructions", 
                                 """You are an art director who has strong opinions about copywriting born of a love for David Ogilvy.
 The goal is to determine if the given copy is ready to print.
@@ -110,6 +130,7 @@ If so, state that it is approved by saying the word "APPROVED". Do not use the w
 If not good enough, provide insight on how to refine suggested copy without example.""")
     
     copywriter_name = st.text_input("Copywriter Agent Name", "CopyWriter")
+    # Set the default copywriter instructions
     copywriter_instructions = st.text_area("Copywriter Instructions", 
                                 """You are a copywriter with 8 years of experience and are known for brevity and a dry humor.
 The goal is to refine and decide on the single best copy as an expert in the field.
@@ -155,31 +176,42 @@ Consider suggestions when refining an idea.""")
 
 # Display chat history
 for msg in st.session_state.messages:
-    with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
+    # Check if the message has inner monologue data
+    if "role" in msg and msg["role"] == "assistant" and "inner_monologue" in msg and st.session_state.show_inner_monologue:
+        # Display the inner monologue in an expander
+        with st.expander("💭 Agents' Inner Monologue", expanded=True):
+            st.markdown(msg["inner_monologue"])
+        
+        # Display just the final response (if available)
+        if "final_response" in msg:
+            with st.chat_message("assistant"):
+                st.markdown(msg["final_response"])
+    else:
+        # Display normal messages
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
 
 # Function to run the Azure AI Agent Group Chat - modified version
 @tracer.start_as_current_span(name="ai_agent_group_chat_streamlit")
 async def run_agent_group_chat(user_input):
     try:
-        ai_agent_settings = AzureAIAgentSettings.create()
-        
-        # Initialize agents and client
-        async with DefaultAzureCredential() as creds, AzureAIAgent.create_client(credential=creds) as client:
-            # Create the reviewer agent definition and instance
-            reviewer_agent_definition = await client.agents.create_agent(
-                model=ai_agent_settings.model_deployment_name,
+        # Create a single kernel instance for all agents.
+        kernel = create_kernel()
+        az_ai_agent_settings = AzureAIAgentSettings.create()
+        # Initialize agents and client for Azure AI Agent
+        async with (
+            DefaultAzureCredential() as creds,
+            AzureAIAgent.create_client(credential=creds) as client,
+        ):
+            # Create reviewer agent using ChatCompletionAgents approach.
+            agent_reviewer = ChatCompletionAgent(
+                kernel=kernel,
                 name=reviewer_name,
                 instructions=reviewer_instructions,
             )
-            agent_reviewer = AzureAIAgent(
-                client=client,
-                definition=reviewer_agent_definition,
-            )
-            
-            # Create the copywriter agent definition and instance
+            # Create the copywriter agent using Azure AI Agent Service approach.
             copy_writer_agent_definition = await client.agents.create_agent(
-                model=ai_agent_settings.model_deployment_name,
+                model=az_ai_agent_settings.model_deployment_name,
                 name=copywriter_name,
                 instructions=copywriter_instructions,
             )
@@ -187,9 +219,6 @@ async def run_agent_group_chat(user_input):
                 client=client,
                 definition=copy_writer_agent_definition,
             )
-            
-            # Format user input for clarity
-            formatted_input = f"Create a slogan for: {user_input}"
             
             # Place the agents in a group chat with the termination strategy
             chat = AgentGroupChat(
@@ -202,43 +231,79 @@ async def run_agent_group_chat(user_input):
             
             try:
                 # Add user message to the chat
-                await chat.add_chat_message(message=formatted_input)
+                await chat.add_chat_message(message=user_input)
+                
+                # Create a container for live updates during processing
+                live_update_container = st.empty()
                 
                 # Process messages and display them one after the other
                 responses = []
+                final_response = None
+                final_agent = None
+                is_approved = False
+                
                 async for content in chat.invoke():
                     if content.role == AuthorRole.ASSISTANT:
                         agent = content.name or "Assistant"
                         response_text = content.content
                         
-                        # Display the agent's message immediately
-                        with st.chat_message("assistant", avatar=get_agent_avatar(agent)):
-                            st.markdown(f"**{agent}**: {response_text}")
-                        
+                        # Add to responses list
                         responses.append({
                             "agent": agent,
                             "content": response_text
                         })
+                        
+                        # Check if this is the approval message
+                        if agent == reviewer_name and "approved" in response_text.lower():
+                            is_approved = True
+                            final_agent = agent
+                            final_response = response_text
+                        
+                        # If not approved yet, record the latest response from the copywriter
+                        if not is_approved and agent == copywriter_name:
+                            final_agent = agent
+                            final_response = response_text
+                        
+                        # Display only the current message in the live update container
+                        with live_update_container.container():
+                            st.write(f"💭 {get_agent_avatar(agent)} **{agent}** is thinking...")
+                            st.markdown(f"{response_text}")
                 
-                # Format the final response for saving to history
+                # Clear the live update container once processing is complete
+                live_update_container.empty()
+                
+                # Prepare the inner monologue for saving
                 formatted_responses = [f"{get_agent_avatar(r['agent'])} **{r['agent']}**: {r['content']}" for r in responses]
-                final_response = "\n\n".join(formatted_responses)
+                inner_monologue_text = "\n\n".join(formatted_responses)
                 
-                # Clean up resources
+                # Prepare the final response
+                if final_response:
+                    if is_approved:
+                        # For approved content, extract the copywriter's latest proposal
+                        copywriter_responses = [r for r in responses if r["agent"] == copywriter_name]
+                        if copywriter_responses:
+                            final_proposal = copywriter_responses[-1]["content"]
+                            final_result = f"**Final Approved Copy:**\n\n{final_proposal}\n\n{get_agent_avatar(reviewer_name)} *Approved by {reviewer_name}*"
+                        else:
+                            final_result = f"{get_agent_avatar(final_agent)} **{final_agent}**: {final_response}"
+                    else:
+                        # For non-approved content, show the latest message
+                        final_result = f"{get_agent_avatar(final_agent)} **{final_agent}**: {final_response}"
+                else:
+                    final_result = "No response generated."
+                
                 await chat.reset()
-                await client.agents.delete_agent(agent_reviewer.id)
-                await client.agents.delete_agent(agent_writer.id)
                 
-                return final_response
+                # Return both the inner monologue and final result
+                return {
+                    "inner_monologue": inner_monologue_text,
+                    "final_response": final_result
+                }
                 
             except Exception as e:
                 st.error(f"Error in agent chat: {str(e)}")
-                
-                # Clean up resources even on error
                 try:
                     await chat.reset()
-                    await client.agents.delete_agent(agent_reviewer.id)
-                    await client.agents.delete_agent(agent_writer.id)
                 except Exception:
                     pass
                     
@@ -257,8 +322,18 @@ if user_input := st.chat_input("Enter your request for the agents..."):
     with st.spinner("Agents are collaborating on your request..."):
         response = asyncio.run(run_agent_group_chat(user_input))
         
-    # Save the complete response to history
-    st.session_state.messages.append({"role": "assistant", "content": response})
+    # Save the response (could be a string error message or a dict with inner_monologue and final_response)
+    if isinstance(response, dict):
+        # Save structured response with inner monologue and final response
+        st.session_state.messages.append({
+            "role": "assistant", 
+            "content": response["final_response"],  # for backward compatibility
+            "inner_monologue": response["inner_monologue"],
+            "final_response": response["final_response"]
+        })
+    else:
+        # Save error message
+        st.session_state.messages.append({"role": "assistant", "content": response})
     
     # Save the conversation
     save_messages(st.session_state.session_id, st.session_state.messages)
