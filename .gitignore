@@ -6,3 +6,5 @@ conversations/*
 sample_rag_chatbot/*
 __pycache__/*
 agent_conversations/*
+AgentGroupChat_conversation/*
+SK_conversations/*

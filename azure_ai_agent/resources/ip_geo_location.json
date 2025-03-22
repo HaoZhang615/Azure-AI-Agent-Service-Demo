@@ -1,0 +1,87 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Geolocation API",
+    "description": "Automatically returns the current location (city and country) based on the requester's IP address.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://api.ipgeolocation.io"
+    }
+  ],
+  "paths": {
+    "/ipgeo": {
+      "get": {
+        "operationId": "GetGeolocation",
+        "summary": "Retrieve geolocation data based on IP address",
+        "description": "Returns the city and country of the requester based on their IP address.",
+        "parameters": [
+          {
+            "name": "apiKey",
+            "in": "query",
+            "required": true,
+            "description": "Your API key for authentication.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "ip",
+            "in": "query",
+            "required": true,
+            "description": "The IP address to look up. ",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response with geolocation data.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ip": {
+                      "type": "string",
+                      "description": "The IP address of the requester or queried IP."
+                    },
+                    "city": {
+                      "type": "string",
+                      "description": "The city of the requester or queried IP."
+                    },
+                    "country_name": {
+                      "type": "string",
+                      "description": "The country of the requester or queried IP."
+                    },
+                    "latitude": {
+                      "type": "number",
+                      "format": "float",
+                      "description": "Latitude of the location."
+                    },
+                    "longitude": {
+                      "type": "number",
+                      "format": "float",
+                      "description": "Longitude of the location."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request - Invalid parameters or missing API key."
+          },
+          "500": {
+            "description": "Internal Server Error - Something went wrong on the server side."
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {}
+  }
+}
